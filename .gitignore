@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+coverage/
+.vitest/
+.agent-teams/
+*.log
+*.tgz
+.env
+.env.*
+!.env.example
+.npmrc
+*.pem
+*.key
+.DS_Store

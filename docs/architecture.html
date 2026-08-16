@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-dev-reloader 架构图</title>
+<style>
+  :root {
+    --host: #6366f1;
+    --host-bg: #eef2ff;
+    --sup: #059669;
+    --sup-bg: #ecfdf5;
+    --client: #a855f7;
+    --client-bg: #faf5ff;
+    --line: #dbe4f0;
+    --line-strong: #cbd5e1;
+    --text: #172033;
+    --muted: #64748b;
+    --surface: rgba(255, 255, 255, .88);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .05);
+    --shadow-lg: 0 18px 50px rgba(15, 23, 42, .09), 0 2px 8px rgba(15, 23, 42, .04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 8% 10%, rgba(99, 102, 241, .08), transparent 28rem),
+      radial-gradient(circle at 92% 32%, rgba(14, 165, 233, .07), transparent 30rem),
+      #f6f8fc;
+    line-height: 1.65;
+  }
+  header {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    padding: 48px max(32px, calc((100vw - 1072px) / 2)) 42px;
+    background: linear-gradient(125deg, #0b1220 0%, #172554 55%, #312e81 100%);
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, .12);
+  }
+  header::before,
+  header::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    border-radius: 999px;
+    filter: blur(2px);
+    pointer-events: none;
+  }
+  header::before {
+    width: 360px; height: 360px; right: 6%; top: -250px;
+    background: radial-gradient(circle, rgba(129, 140, 248, .46), transparent 68%);
+  }
+  header::after {
+    width: 280px; height: 280px; left: 12%; bottom: -245px;
+    background: radial-gradient(circle, rgba(56, 189, 248, .32), transparent 70%);
+  }
+  header h1 {
+    margin: 0 0 8px;
+    font-size: clamp(26px, 3vw, 34px);
+    line-height: 1.2;
+    letter-spacing: -.4px;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, .18);
+  }
+  header p { margin: 0; color: #cbd5e1; font-size: 14px; letter-spacing: .15px; }
+  main { max-width: 1120px; margin: 0 auto; padding: 30px 24px 72px; }
+  section { position: relative; margin: 38px 0; }
+  h2 {
+    font-size: 20px;
+    margin: 0 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    line-height: 1.35;
+    letter-spacing: -.15px;
+  }
+  h2 .tag {
+    display: inline-grid;
+    place-items: center;
+    min-width: 38px;
+    height: 25px;
+    font-size: 11px;
+    font-weight: 750;
+    color: #fff;
+    background: linear-gradient(135deg, #6366f1, #3b82f6);
+    border: 1px solid rgba(255, 255, 255, .3);
+    border-radius: 999px;
+    padding: 0 9px;
+    letter-spacing: .7px;
+    box-shadow: 0 5px 12px rgba(79, 70, 229, .2);
+  }
+  .diagram {
+    position: relative;
+    background:
+      linear-gradient(rgba(255,255,255,.94), rgba(255,255,255,.94)),
+      radial-gradient(circle, #94a3b8 1px, transparent 1px);
+    background-size: auto, 18px 18px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 30px 18px 24px;
+    overflow-x: auto;
+    box-shadow: var(--shadow-sm);
+    transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease;
+  }
+  .diagram::before {
+    content: "";
+    position: absolute;
+    top: 13px; left: 16px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #f87171;
+    box-shadow: 12px 0 #fbbf24, 24px 0 #34d399;
+    opacity: .82;
+  }
+  .diagram .mermaid { display: flex; justify-content: center; min-width: fit-content; }
+  .diagram .mermaid svg { filter: drop-shadow(0 4px 7px rgba(15, 23, 42, .04)); }
+
+  /* 02～05 是架构阅读主线：用独立色彩和更强的容器层级重点呈现。 */
+  section:nth-of-type(n+2):nth-of-type(-n+5) {
+    --section-accent: #3b82f6;
+    padding: 24px;
+    border: 1px solid rgba(203, 213, 225, .72);
+    border-radius: 24px;
+    background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(248,250,252,.82));
+    box-shadow: 0 14px 40px rgba(15, 23, 42, .055);
+  }
+  section:nth-of-type(3) { --section-accent: #8b5cf6; }
+  section:nth-of-type(4) { --section-accent: #10b981; }
+  section:nth-of-type(5) { --section-accent: #f59e0b; }
+  section:nth-of-type(n+2):nth-of-type(-n+5)::before {
+    content: "";
+    position: absolute;
+    top: 24px; bottom: 24px; left: -1px;
+    width: 3px;
+    border-radius: 0 4px 4px 0;
+    background: linear-gradient(180deg, var(--section-accent), transparent 84%);
+  }
+  section:nth-of-type(n+2):nth-of-type(-n+5) h2 { color: #111827; }
+  section:nth-of-type(n+2):nth-of-type(-n+5) h2 .tag {
+    background: var(--section-accent);
+    box-shadow: 0 5px 14px color-mix(in srgb, var(--section-accent) 26%, transparent);
+  }
+  section:nth-of-type(n+2):nth-of-type(-n+5) .diagram {
+    border-color: color-mix(in srgb, var(--section-accent) 20%, var(--line));
+    box-shadow: 0 16px 36px rgba(15, 23, 42, .07), inset 0 1px 0 #fff;
+  }
+  section:nth-of-type(n+2):nth-of-type(-n+5) .diagram::after {
+    content: "ARCHITECTURE";
+    position: absolute;
+    top: 9px; right: 14px;
+    color: color-mix(in srgb, var(--section-accent) 62%, #64748b);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    opacity: .72;
+  }
+  section:nth-of-type(n+2):nth-of-type(-n+5):hover .diagram {
+    border-color: color-mix(in srgb, var(--section-accent) 38%, var(--line));
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-1px);
+  }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 19px 20px;
+    box-shadow: var(--shadow-sm);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .card h4 { margin: 0 0 10px; font-size: 15px; }
+  .card.host { border-top: 4px solid var(--host); }
+  .card.sup { border-top: 4px solid var(--sup); }
+  .card.client { border-top: 4px solid var(--client); }
+  .card ul { margin: 7px 0 0; padding-left: 18px; font-size: 13px; color: #475569; }
+  .card li + li { margin-top: 3px; }
+  code {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    padding: 1px 5px;
+    color: #334155;
+    font-size: .92em;
+  }
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    overflow: hidden;
+    background: rgba(255, 255, 255, .92);
+    font-size: 13px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  th, td { border: 0; border-bottom: 1px solid var(--line); padding: 11px 14px; text-align: left; }
+  tr:last-child td { border-bottom: 0; }
+  th { background: #eef2f7; color: #334155; font-size: 12px; letter-spacing: .3px; }
+  tbody tr:hover td { background: #f8fafc; }
+  .note {
+    position: relative;
+    background: linear-gradient(135deg, #fffbeb, #fff7ed);
+    border: 1px solid #fcd34d;
+    border-left: 4px solid #f59e0b;
+    border-radius: 12px;
+    padding: 13px 16px;
+    color: #78350f;
+    font-size: 13px;
+    margin: 14px 0 0;
+    box-shadow: 0 7px 20px rgba(245, 158, 11, .08);
+  }
+  footer { text-align: center; color: #94a3b8; font-size: 12px; padding: 25px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: .35px;
+    margin-right: 7px;
+    vertical-align: 1px;
+  }
+  .b-host { background: var(--host-bg); color: var(--host); }
+  .b-sup { background: var(--sup-bg); color: var(--sup); }
+  .b-client { background: var(--client-bg); color: var(--client); }
+
+  @media (max-width: 720px) {
+    header { padding: 34px 20px 30px; }
+    main { padding: 18px 14px 48px; }
+    section { margin: 28px 0; }
+    section:nth-of-type(n+2):nth-of-type(-n+5) { padding: 18px 12px; border-radius: 18px; }
+    h2 { align-items: flex-start; font-size: 17px; }
+    .diagram { padding: 27px 10px 18px; border-radius: 14px; }
+    .cards { grid-template-columns: 1fr; }
+    .card { padding: 16px; }
+    table { display: block; overflow-x: auto; white-space: nowrap; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { transition: none !important; }
+  }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#dbeafe',
+      primaryBorderColor: '#3b82f6',
+      primaryTextColor: '#1c2430',
+      secondaryColor: '#d1fae5',
+      secondaryBorderColor: '#059669',
+      tertiaryColor: '#fae8ff',
+      tertiaryBorderColor: '#a855f7',
+      lineColor: '#94a3b8',
+      clusterBkg: '#fafbfd',
+      clusterBorder: '#cbd5e1',
+      fontFamily: '-apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'linear', htmlLabels: true, nodeSpacing: 36, rankSpacing: 48 },
+    securityLevel: 'loose',
+  });
+</script>
+</head>
+<body>
+<header>
+  <h1>dsh-dev-reloader 架构图</h1>
+  <p>DSH 开发热重载插件 · 三进程边界 / IPC 信任 / 变更分类 / 状态机 / 重启序列</p>
+</header>
+<main>
+
+  <!-- ============ 总览 ============ -->
+  <section>
+    <h2><span class="tag">01</span>总览：三进程边界</h2>
+    <div class="cards">
+      <div class="card host">
+        <h4><span class="badge b-host">HOST</span>DSH 宿主进程（Cordis）</h4>
+        <ul>
+          <li><code>src/index.ts</code> — 插件入口 + <code>installSettingsSection</code> 设置项</li>
+          <li><code>src/bridge/activity.ts</code> — 订阅 <code>ctx.agents/jobs</code>，生成 ActivitySnapshot</li>
+          <li><code>src/bridge/client.ts</code> — 认证 IPC 客户端</li>
+          <li><code>src/bridge/routes.ts</code> — <code>/plugins/dsh-dev-reloader/{status,health,command}</code>（仅 loopback）</li>
+          <li><code>src/bridge/spawn.ts</code> — detached 拉起 supervisor</li>
+        </ul>
+      </div>
+      <div class="card sup">
+        <h4><span class="badge b-sup">SUPERVISOR</span>独立 Node supervisor</h4>
+        <ul>
+          <li><code>lib/supervisor/cli.js --serve --profile &lt;profile&gt;</code> 常驻</li>
+          <li>锁 + 私有 token + Unix socket IPC（HMAC 挑战应答，token 永不上线）</li>
+          <li>发现 / 分类 / 监听 / 构建 / 门控 / 健康检查 / 生命周期 / 状态机</li>
+          <li>一次性认证 self-handoff（<code>handoff.ts</code>）</li>
+        </ul>
+      </div>
+      <div class="card client">
+        <h4><span class="badge b-client">CLIENT</span>浏览器客户端（web bundle）</h4>
+        <ul>
+          <li><code>lib/client.js</code> — 设置卡片 <code>SettingsCard.tsx</code></li>
+          <li><code>reconnect.ts</code> — 一次性恢复（sessionStorage 标记 + 轮询 + 单次 reload）</li>
+          <li><code>api.ts</code> — 同源路由调用（status / health / command）</li>
+          <li>注入 <code>slots / locale / settingsScope / connection / remote</code></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 系统上下文 ============ -->
+  <section>
+    <h2><span class="tag">02</span>系统上下文</h2>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  U["👤 开发者<br/>浏览器"]
+  DR["🔄 dsh-dev-reloader<br/>监听源码 → 构建 → 按需重启 DSH web"]
+  DSH["🧩 DSH 宿主<br/>agents · jobs · webServer · settings"]
+  BLD["⚙️ 构建命令<br/>pnpm · tsc · tsdown"]
+  FS["📁 项目文件系统<br/>src · package.json · cordis.patch.yml"]
+
+  U -- "查看状态 / 触发控制" --> DR
+  DR -- "以 host 插件挂载，读取活动" --> DSH
+  DSH -- "由 bridge 管理重启 / 监视" --> DR
+  DR -- "触发构建 (executable+argv)" --> BLD
+  DR -- "chokidar 监听" --> FS
+
+  classDef actor fill:#fde8e8,stroke:#c0392b,color:#1c2430
+  classDef system fill:#dbeafe,stroke:#3b82f6,color:#1c2430,stroke-width:2px
+  classDef external fill:#f1f5f9,stroke:#64748b,color:#1c2430
+  class U actor
+  class DR system
+  class DSH,BLD,FS external
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ 容器 ============ -->
+  <section>
+    <h2><span class="tag">03</span>容器图：三进程与信任边界</h2>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph HOST["🧩 DSH 宿主进程 · Cordis"]
+    direction TB
+    HP["host 插件<br/>activity / client / spawn / settings"]
+    RT["HTTP 路由<br/>status · health · command"]
+  end
+  subgraph SUP["🛡️ Supervisor 守护器 · 独立 Node"]
+    direction TB
+    IPC["认证 IPC 服务<br/>Unix socket · HMAC"]
+    ORCH["编排 · 状态机 · 门控"]
+    LIFE["生命周期 · 健康检查"]
+    BLD["构建执行"]
+  end
+  subgraph CLI["🌐 浏览器客户端 · lib/client.js"]
+    CARD["设置卡片 + 一次性恢复"]
+  end
+
+  CARD -- "GET / POST (loopback · 同源)" --> RT
+  RT -- "命令 / 状态 / 事件" --> IPC
+  HP -- "hello / activity / host-disposing / hmr" --> IPC
+  IPC -- "事件与命令" --> ORCH
+  ORCH -- "重启事务" --> LIFE
+  ORCH -- "runBuilds / onReady" --> BLD
+  LIFE -- "SIGTERM / detached 替换" --> HP
+
+  classDef hostSub fill:#e0e7ff,stroke:#6366f1,color:#1c2430
+  classDef supSub fill:#d1fae5,stroke:#059669,color:#1c2430
+  classDef cliSub fill:#fae8ff,stroke:#a855f7,color:#1c2430
+  classDef node fill:#ffffff,stroke:#94a3b8,color:#1c2430
+  class HOST hostSub
+  class SUP supSub
+  class CLI cliSub
+  class HP,RT,IPC,ORCH,LIFE,BLD,CARD node
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ Supervisor 组件 ============ -->
+  <section>
+    <h2><span class="tag">04</span>Supervisor 内部组件</h2>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+  IPC["ipc.ts · 认证 / 帧边界 / 去重"]
+  LOCK["lock.ts · 单例锁"]
+
+  subgraph CORE["🎯 编排核心"]
+    direction TB
+    S["supervisor.ts<br/>start · restart · rebuild · updateConfig · pause · stop · handoff"]
+    G["task-gate.ts · fail-closed 活动门控"]
+    ST["shared/state.ts · 相位机"]
+  end
+
+  subgraph ADAPT["🔧 能力适配器"]
+    direction TB
+    A1["discovery → classifier<br/>项目发现 → 变更分类 (ignore < hmr < full-restart)"]
+    A2["watcher → scheduler → runner<br/>监听 → 合并去抖 → 结构化 argv 构建"]
+  end
+
+  subgraph HLIFE["💚 宿主生命周期"]
+    direction TB
+    H1["health-check.ts<br/>HTTP + bridge bootId 双采样"]
+    H2["lifecycle.ts<br/>adopt / restart / 崩溃恢复 / DSH_DEV_BOOT_ID"]
+  end
+
+  HF["handoff.ts · 一次性认证通道"]
+
+  IPC --> S
+  S --> G
+  S --> ST
+  S --> A1
+  A1 --> A2
+  S --> H2
+  H2 --> H1
+  S --> HF
+  S --> LOCK
+
+  classDef coreSub fill:#d1fae5,stroke:#059669,color:#1c2430
+  classDef adaptSub fill:#dbeafe,stroke:#3b82f6,color:#1c2430
+  classDef lifeSub fill:#fae8ff,stroke:#a855f7,color:#1c2430
+  classDef node fill:#ffffff,stroke:#94a3b8,color:#1c2430
+  class CORE coreSub
+  class ADAPT adaptSub
+  class HLIFE lifeSub
+  class IPC,LOCK,HF,A1,A2,H1,H2,S,G,ST node
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ 状态机 ============ -->
+  <section>
+    <h2><span class="tag">05</span>状态机</h2>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  S(["▶ starting"]):::idle
+  W(["✓ watching"]):::ok
+  B(["🔨 building"]):::busy
+  HW(["⏳ hmr-wait"]):::busy
+  PR(["⏸ pending-restart"]):::warn
+  RS(["🔄 restarting"]):::busy
+  RC(["💚 recovering"]):::ok
+  DG(["⚠ degraded"]):::warn
+  FD(["✖ failed"]):::err
+  PZ(["⏸ paused"]):::idle
+
+  S -->|watch-ready| W
+  W -->|build-started| B
+  B -->|build-succeeded| W
+  B -->|hmr-wait| HW
+  HW -->|hmr-complete| W
+  W -->|restart-pending| PR
+  B -->|restart-pending| PR
+  HW -->|restart-pending| PR
+  PR -->|"restart-ready (门开)"| RS
+  RS -->|host-started| RC
+  RC -->|recovered| W
+  B -->|build-failed| DG
+  W -->|degrade| DG
+  HW -->|degrade| DG
+  RS -->|重启失败| DG
+  RC -->|恢复失败| DG
+  DG -->|watch-ready| W
+  DG -->|build-started| B
+  W -->|fail| FD
+  S -->|fail| FD
+  W -->|pause| PZ
+  PZ -->|"resume (enabled)"| W
+
+  classDef ok fill:#d1fae5,stroke:#059669,color:#1c2430,stroke-width:1.5px
+  classDef busy fill:#dbeafe,stroke:#3b82f6,color:#1c2430,stroke-width:1.5px
+  classDef warn fill:#fef3c7,stroke:#d97706,color:#1c2430,stroke-width:1.5px
+  classDef err fill:#fee2e2,stroke:#dc2626,color:#1c2430,stroke-width:1.5px
+  classDef idle fill:#f1f5f9,stroke:#64748b,color:#1c2430,stroke-width:1.5px
+</pre>
+    </div>
+    <p class="note">说明：<code>pending-restart</code> 会一直等待活动门控（gate）打开，<code>force</code> 可绕过；restart 期间的 watcher 错误会被延迟到 <code>recovered</code> 之后应用（deferred degrade），避免破坏重启状态机；崩溃熔断打开后进入 <code>failed</code>，可由 GUI force 恢复。</p>
+  </section>
+
+  <!-- ============ 动态重启序列 ============ -->
+  <section>
+    <h2><span class="tag">06</span>完整重启序列（动态图）</h2>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant FS as 项目文件系统
+  participant S as Supervisor
+  participant G as 活动门控
+  participant L as Lifecycle
+  participant H as 新 DSH 宿主
+  participant B as 浏览器
+
+  FS->>S: 源码变更
+  S->>S: 分类 + 构建 (结构化 argv)
+
+  alt full-restart
+    S->>G: requestRestart
+    G-->>S: 活动空闲 → 放行
+    S->>L: restart(host, expectedBootId)
+    L->>L: SIGTERM → SIGKILL 兜底 → 端口释放
+    L->>H: detached 替换宿主 (注入 DSH_DEV_BOOT_ID)
+    L->>L: 健康检查 (HTTP 2xx + bridge bootId)
+    H->>S: 新 bridge hello (新 pid/bootId)
+    S->>S: prepareBridge → 代际重置
+    S->>S: host-started → recovered → watching
+    S->>B: 状态广播
+    B->>B: 轮询 /health (no-store)
+    B->>B: 新 bootId → location.reload() 一次
+  else server-hmr
+    S->>H: 等待显式 hmr/reload ack
+    H-->>S: 匹配 entries → hmr-complete
+    S-->>S: 超时 → 升级 full-restart
+  else client-hmr
+    S->>S: ensurePersistent(dev:web)
+  end
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ 安全边界 ============ -->
+  <section>
+    <h2><span class="tag">07</span>安全与信任边界</h2>
+    <table>
+      <tr><th>领域</th><th>机制</th></tr>
+      <tr><td>目录 / 文件权限</td><td>stateDir 0700；token / 锁 / socket 0600；用户属主校验；O_NOFOLLOW + inode 快照防符号链接攻击</td></tr>
+      <tr><td>IPC 认证</td><td>HMAC-SHA256 挑战应答（createProof），token 永不经过线路；nonce 绑定 + 重放检查；peer 代际（pid+bootId）准入，事件与命令都过滤</td></tr>
+      <tr><td>HTTP 路由</td><td>仅 loopback（127.0.0.1 / ::1），拒绝 forwarded、跨源、非 JSON；body ≤ 64 KiB；status/health 只返回脱敏公开数据（永不返回 env/token）</td></tr>
+      <tr><td>命令执行</td><td>仅 executable + argv，不拼接不可信命令；默认 <code>shell:false</code>，Windows 仅对受信 pnpm shim 使用系统命令包装；输出 bounded + 敏感赋值脱敏；持久进程可 stopAll</td></tr>
+      <tr><td>失败关闭</td><td>gate 在 bridge-unknown 时 fail-closed；unexpected-exit 双触发去重；崩溃熔断 bounded；handoff 模糊所有权 fail-closed</td></tr>
+      <tr><td>恢复</td><td>浏览器一次性恢复（marker + no-store 轮询 + 新 bootId 才 reload），不会重复刷新</td></tr>
+    </table>
+  </section>
+
+</main>
+<footer>dsh-dev-reloader · docs/architecture.html · 与 docs/architecture.md 同源，仅供本地开发使用</footer>
+</body>
+</html>

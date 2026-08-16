@@ -1,0 +1,2 @@
+# Source maps embed source text; stable LF checkouts keep generated output reproducible.
+* text=auto eol=lf

@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }} / Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Setup pnpm
+        with:
+          version: 11.8.0
+
+      - uses: actions/setup-node@v4
+        name: Setup Node.js ${{ matrix.node }}
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify (typecheck + tests + build)
+        run: pnpm verify
+
+      - name: Verify committed distribution
+        run: git diff --exit-code -- lib
+
+  pack-smoke:
+    name: pack smoke (ubuntu-latest / Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Setup pnpm
+        with:
+          version: 11.8.0
+
+      - uses: actions/setup-node@v4
+        name: Setup Node.js 22
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate committed distribution
+        run: |
+          test -f lib/index.js
+          test -f lib/client.js
+          test -f lib/types/index.d.ts
+          node -e "
+            const p = require('./package.json');
+            for (const name of ['prepare', 'prepack', 'prepublish']) {
+              if (p.scripts?.[name]) throw new Error('Git install lifecycle script is not allowed: ' + name);
+            }
+          "
+
+      - name: Pack committed distribution
+        run: pnpm pack --pack-destination "$RUNNER_TEMP"
+
+      - name: Extract and inspect pack
+        run: |
+          set -euo pipefail
+          PACK_DIR="$RUNNER_TEMP"
+          TGZ="$(find "$PACK_DIR" -maxdepth 1 -name 'dsh-dev-reloader-*.tgz' | head -n 1)"
+          test -n "$TGZ"
+          mkdir -p "$PACK_DIR/extract"
+          tar -xzf "$TGZ" -C "$PACK_DIR/extract"
+          PACKAGE_DIR="$PACK_DIR/extract/package"
+
+          # Metadata contract: name, version, dsh.bundle.patch, dsh.client.platform.
+          node -e "
+            const p = require(process.argv[1]);
+            if (p.name !== 'dsh-dev-reloader') throw new Error('bad name: ' + p.name);
+            if (!p.version) throw new Error('missing version');
+            if (p.private !== true) throw new Error('GitHub-only package must remain private from npm publishing');
+            if (p.repository?.url !== 'git+https://github.com/lhzcode/dsh-dev-reloader.git') throw new Error('bad repository URL');
+            if (!p.dsh?.bundle?.patch) throw new Error('missing dsh.bundle.patch');
+            if (p.dsh?.client?.platform !== 'web') throw new Error('bad client platform');
+            for (const name of ['prepare', 'prepack', 'prepublish']) {
+              if (p.scripts?.[name]) throw new Error('packed Git install lifecycle script is not allowed: ' + name);
+            }
+            console.log('metadata ok', p.name, p.version);
+          " "$PACKAGE_DIR/package.json"
+
+          # Required package and documentation files ship inside the bundle.
+          grep -q 'dsh-dev-reloader' "$PACKAGE_DIR/cordis.patch.yml"
+          test -f "$PACKAGE_DIR/README.md"
+          test -f "$PACKAGE_DIR/README.zh.md"
+          test -f "$PACKAGE_DIR/CHANGELOG.md"
+          test -f "$PACKAGE_DIR/docs/architecture.md"
+          test -f "$PACKAGE_DIR/docs/architecture.html"
+          test -f "$PACKAGE_DIR/lib/index.js"
+          test -f "$PACKAGE_DIR/lib/client.js"
+          test -f "$PACKAGE_DIR/lib/types/index.d.ts"
+
+          # No shipped text file may reference the CI checkout path.
+          if grep -RIlF "$GITHUB_WORKSPACE" "$PACKAGE_DIR" 2>/dev/null; then
+            echo "packed artifact leaks the repository checkout path" >&2
+            exit 1
+          fi
+          echo "pack smoke ok"
+
+      - name: Install from Git without build authorization
+        run: |
+          set -euo pipefail
+          CONSUMER="$RUNNER_TEMP/git-consumer"
+          mkdir -p "$CONSUMER"
+          printf '%s\n' '{"name":"git-consumer","private":true}' > "$CONSUMER/package.json"
+          printf '%s\n' 'allowBuilds: {}' > "$CONSUMER/pnpm-workspace.yaml"
+          cd "$CONSUMER"
+          pnpm add "git+file://$GITHUB_WORKSPACE"
+          node --input-type=module -e "await import('dsh-dev-reloader')"
+
+      - name: Rebuild and verify committed distribution
+        run: |
+          pnpm build
+          git diff --exit-code -- lib
