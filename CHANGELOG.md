@@ -2,7 +2,14 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.1.1]
+
+### Changed
+
+- Upgrade DSH runtime/ABI packages from `0.1.0-rc.6` to `0.1.0-rc.7`.
+- Register the settings card into the `settings.plugin.item` keyed slot via `key` instead of the legacy `id`, matching the rc.7 keyed-slot contract and avoiding the keyed-slot exception when third-party bundles use the same seat.
+
+## [0.1.0]
 
 ### Added
 
