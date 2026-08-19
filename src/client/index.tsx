@@ -45,8 +45,7 @@ export function apply(ctx: ClientContext): void {
     ctx.slots.register(
       {
         name: 'settings.plugin.item',
-        id: 'dsh-dev-reloader',
-        order: 40,
+        key: NAMESPACE,
         locale: 'dev-reloader.card',
         inject: () => toFace(),
       },

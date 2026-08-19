@@ -204,7 +204,7 @@ describe('client apply registration', () => {
     apply(ctx as never)
     expect(ctx.settingsScope.bind).toHaveBeenCalledWith({ namespace: 'dsh-dev-reloader' })
     expect(registerCard).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'settings.plugin.item', id: 'dsh-dev-reloader' }),
+      expect.objectContaining({ name: 'settings.plugin.item', key: 'dsh-dev-reloader' }),
       SettingsCard,
     )
     expect(ctx.locale.register).not.toHaveBeenCalled()
