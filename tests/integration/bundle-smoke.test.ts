@@ -48,7 +48,10 @@ describe('bundle smoke (packed tarball)', () => {
       dsh?: { bundle?: { patch?: string }; client?: { platform?: string } }
     }
     expect(manifest.name).toBe('dsh-dev-reloader')
-    expect(manifest.version).toBe('0.1.0')
+    const repoManifest = JSON.parse(
+      await readFile(join(repoRoot, 'package.json'), 'utf8'),
+    ) as { version?: string }
+    expect(manifest.version).toBe(repoManifest.version)
     expect(manifest.dsh?.bundle?.patch).toBe('./cordis.patch.yml')
     expect(manifest.dsh?.client?.platform).toBe('web')
 
